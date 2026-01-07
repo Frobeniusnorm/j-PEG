@@ -1,0 +1,421 @@
+program: global_decl* EOF;
+
+global_decl
+  : NEW_LINE
+  | global_var_decl
+  | global_struct_decl
+  | global_target_decl
+  | global_srcname_decl
+  | global_func_decl
+  | global_func_def
+  ;
+
+global_var_decl: IDENTIFIER EQUALS (linkage)? (preemption)? (visibility)? (dll_storage)? (storage_model)? (UNNAMED_ADDR)? (addr_space)? (EXTERNALLY_INITIALIZED)? (GLOBAL | CONSTANT) (const | type) (COMMA decl_attr)* NEW_LINE
+  ; 
+
+global_struct_decl: IDENTIFIER EQUALS struct_type_decl NEW_LINE;
+global_target_decl: TARGET (DATALAYOUT | TRIPLE) EQUALS STRING_LITERAL NEW_LINE;
+global_srcname_decl: SRC_FILENAME EQUALS STRING_LITERAL NEW_LINE;
+global_func_decl: DECLARE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? NEW_LINE;
+global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? LBRACE NEW_LINE RBRACE;
+
+basic_block : label instr+ NEW_LINE;
+
+instr
+  : ret_instr
+  | br_instr
+  | indirectbr_instr
+  ;
+
+ret_instr
+  : RET type value NEW_LINE
+  | RET VOID NEW_LINE
+  ;
+
+br_instr
+  : BR LABEL IDENTIFIER NEW_LINE
+  | BR type IDENTIFIER COMMA LABEL IDENTIFIER COMMA LABEL IDENTIFIER NEW_LINE
+  ;
+
+switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type constant COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK NEW_LINE;
+
+indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK NEW_LINE;
+
+label_list: LABEL IDENTIFIER;
+
+invoke_instr: INVOKE (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN NEW_LINE;
+
+decl_attr
+  : SECTION STRING_LITERAL
+  | PARTITION STRING_LITERAL
+  | COMDAT (IDENTIFIER)?
+  | align
+  | CODE_MODEL STRING_LITERAL
+  | NO_SANITIZE_ADDRESS
+  | NO_SANITIZE_HWADDRESS
+  | SANITIZE_ADDRESS_DYNINIT
+  | SANITIZE_MEMTAG
+  ;
+
+linkage
+  : PRIVATE
+  | INTERNAL
+  | AVAILABLE_EXTERNALLY
+  | LINKONCE
+  | WEAK
+  | COMMON
+  | APPENDING
+  | EXTERN_WEAK
+  | LINKONCE_ODR
+  | WEAK_ODR
+  | EXTERNAL
+  ;
+
+storage_model
+  : LOCALDYNAMIC
+  | INITIALEXEC
+  | LOCALEXEC
+  ;
+
+preemption
+  : DSO_PREEMPTABLE
+  | DSO_LOCAL
+  ;
+
+visibility
+  : DEFAULT
+  | HIDDEN
+  | PROTECTED
+  ;
+
+dll_storage
+  : DLLIMPORT
+  | DLLEXPORT
+  ;
+
+float_type
+  : HALF
+  | BFLOAT
+  | FLOAT
+  | DOUBLE
+  | FP128
+  | X86_FP80
+  | PPC_FP128
+  ;
+
+ptr_type
+  : new_ptr_style
+  | old_ptr_style
+  ;
+
+vector_type: LANGLE (VSCALE XLIT)? int_literal XLIT type RANGLE ;
+
+function_type: type LPAREN param_type_list RPAREN;
+param_type_list
+  : DOTS
+  | type COMMA param_type_list
+  | type
+  ;
+
+array_type: LBRACK int_literal XLIT type RBRACK;
+
+struct_type_decl: TYPE opaque_or_struct;
+opaque_or_struct
+  : OPAQUE
+  | literal_struct_type
+  ;
+
+literal_struct_type
+  : LBRACE type_list RBRACE
+  | LANGLE LBRACE type_list RBRACE RANGLE
+  ;
+
+type
+  : literal_struct_type
+  | array_type
+  | vector_type
+  | VOID
+  | INT_TYPE
+  | float_type
+  | ptr_type
+  | LABEL
+  | IDENTIFIER;
+type_list : type (COMMA type)*;
+
+value:
+  : const
+  | IDENTIFIER
+  ;
+
+label: [A-Za-z0-9]+ COLON;
+
+int_literal
+  : HEXA_LITERAL
+  | DECIMAL_LITERAL
+  ;
+float_literal
+  : FLOAT_HEXA_LITERAL
+  | FLOAT_LITERAL
+  ;
+
+new_ptr_style: PTR (addr_space)?;
+old_ptr_style: type STAR (addr_space)?;
+addr_space: ADDRSPACE LPAREN (STRING_LITERAL | int_literal) RPAREN;
+
+struct_constant: LBRACE const_list RBRACE;
+array_constant: LBRACK (const (COMMA const)*) RBRACK;
+vector_constant: LANGLE const_list RANGLE;
+ptr_constant: NULL;
+
+const
+  : EXCLAM? 
+  (  (float_type float_literal)
+   | (INT_TYPE int_literal) 
+   | (literal_struct_type struct_constant)
+   | (array_type array_constant)
+   | (vector_type vector_constant)
+   | (array_type STRING_LITERAL)
+   | (ptr_type ptr_constant?)
+   | (ZEROINITIALIZER) );
+const_list: const (COMMA const)*;
+
+by_val: BYVAL LPAREN type RPAREN;
+by_ref: BYREF LPAREN type RPAREN;
+preallocated: PREALLOC LPAREN type RPAREN;
+inalloca: INALLOCA LPAREN type RPAREN;
+sret: SRET LPAREN type RPAREN;
+elementtype: ELEMENTTYPE LPAREN type RPAREN;
+align
+  : ALIGN int_literal
+  | ALIGN LPAREN int_literal RPAREN;
+capture_el: NONE | ADDRESS | PROVENANCE | ADDRESS_IS_NULL | READ_PROVENANCE | RET COLON ADDRESS;
+capture_el_list: capture_el (COMMA capture_el)*;
+captures: CAPTURES LPAREN capture_el_list RPAREN;
+dereferenceable: DEREFERENCEABLE LPAREN int_literal RPAREN;
+dereferenceable_or_null: DEREFERENCEABLE_OR_NULL LPAREN int_literal RPAREN;
+test_mask: NAN | INF | NORM | SUB | ZERO | ALL | SNAN | QNAN | NINF | NNORM | NSUB | NZERO | PZERO | PSUB | PNORM | PINF;
+nofpclass: NOFPCLASS LPAREN test_mask RPAREN;
+alignstack: ALIGNSTACK LPAREN int_literal RPAREN;
+initialize_el: LPAREN int_literal COMMA int_literal RPAREN;
+initialize_el_list: initialize_el (COMMA initialize_el)*;
+initializes: INITIALIZES LPAREN initialize_el_list RPAREN;
+range: RANGE LPAREN type const COMMA const RPAREN;
+param_attrib
+  : ZEROEXT
+  | SIGNEXT
+  | NOEXT
+  | INREG
+  | by_val
+  | by_ref
+  | preallocated
+  | inalloca
+  | sret
+  | elementtype
+  | align
+  | NOALIAS
+  | captures
+  | NOCAPTURE
+  | NOFREE
+  | NEST
+  | RETURNED
+  | NONNULL
+  | dereferenceable
+  | dereferenceable_or_null
+  | SWIFTSELF
+  | SWIFTASYNC
+  | SWIFTERROR
+  | IMMARG
+  | NOUNDEF
+  | nofpclass
+  | alignstack
+  | ALLOCALIGN
+  | ALLOCPTR
+  | READNONE
+  | READONLY
+  | WRITEONLY
+  | WRITABLE
+  | initializes
+  | DEAD_ON_UNWIND
+  | DEAD_ON_RETURN
+  | range
+  ;
+
+arg_decl
+  : DOTS
+  | type (param_attrib)*
+  ;
+arg_list: arg_decl* (COMMA arg_decl)*;
+
+param_decl: type (param_attrib)* value;
+param_list: param_decl* (COMMA param_decl)*;
+
+STRING_LITERAL: ('c')? '"' [^"]* '"';
+CHAR_LITERAL: '\'' [^'] '\'';
+DECIMAL_LITERAL: ('-')? (([1-9] [0-9]*) | '0' | 'true' | 'false');
+HEXA_LITERAL: [us] '0' [xX] [0-9a-fA-F]+;
+FLOAT_LITERAL: ('-')?[0-9]*'.'[0-9]+('e'('+'|'-')[0-9]+)?;
+FLOAT_HEXA_LITERAL: '0' [xX] [MLHR]? [0-9a-fA-F]+ ;
+IDENTIFIER: [%@$][-a-zA-Z$._][-a-zA-Z$._0-9]*;
+
+PRIVATE: 'private';
+INTERNAL: 'internal';
+AVAILABLE_EXTERNALLY: 'available_externally';
+LINKONCE: 'linkonce';
+WEAK: 'weak';
+COMMON: 'common';
+APPENDING: 'appending';
+EXTERN_WEAK: 'extern_weak';
+LINKONCE_ODR: 'linkonce_odr';
+WEAK_ODR: 'weak_odr';
+EXTERNAL: 'external';
+
+CONSTANT: 'constant';
+GLOBAL: 'global';
+UNDEF: 'undef';
+ZEROINITIALIZER: 'zeroinitializer';
+
+LOCALDYNAMIC: 'localdynamic';
+INITIALEXEC: 'initialexec';
+LOCALEXEC: 'localexec';
+
+DSO_PREEMPTABLE: 'dso_preemptable';
+DSO_LOCAL: 'dso_local';
+
+VOID: 'void';
+INT_TYPE: 'i' [0-9]+ ;
+NUMBERING: '#' [0-9]* ;
+HALF : 'half';
+BFLOAT : 'bfloat';
+FLOAT : 'float';
+DOUBLE : 'double';
+FP128 : 'fp128';
+X86_FP80 : 'x86_fp80';
+PPC_FP128 : 'ppc_fp128';
+
+UNNAMED_ADDR: 'unnamed_addr' | 'local_unnamed_addr';
+
+DEFAULT: 'default';
+HIDDEN: 'hidden';
+PROTECTED: 'protected';
+
+DLLIMPORT: 'dllimport';
+DLLEXPORT: 'dllexport';
+
+EXTERNALLY_INITIALIZED: 'externally_initialized';
+
+TYPE: 'type';
+OPAQUE: 'opaque';
+PTR: 'ptr';
+ADDRSPACE: 'addrspace';
+TARGET: 'target';
+SRC_FILENAME: 'source_filename';
+DATALAYOUT: 'datalayout';
+TRIPLE: 'triple';
+DECLARE: 'declare';
+DEFINE: 'define';
+ZEROEXT: 'zeroext';
+SIGNEXT: 'signext';
+NOEXT: 'noext';
+INREG: 'inreg';
+BYVAL: 'byval';
+BYREF: 'byref';
+PREALLOC: 'preallocated';
+INALLOCA: 'inalloca';
+SRET: 'sret';
+ELEMENTTYPE: 'elementtype';
+NOALIAS: 'noalias';
+CAPTURES: 'captures';
+NOCAPTURE: 'nocapture';
+NOFREE: 'nofree';
+NEST: 'nest';
+RETURNED: 'returned';
+NONNULL: 'nonnull';
+DEREFERENCEABLE: 'dereferenceable';
+DEREFERENCEABLE_OR_NULL: 'dereferenceable_or_null';
+SWIFTSELF: 'swiftself';
+SWIFTASYNC: 'swiftasync';
+SWIFTERROR: 'swifterror';
+IMMARG: 'immarg';
+NOUNDEF: 'noundef';
+NOFPCLASS: 'nofpclass';
+NAN: 'nan';
+NONE: 'none';
+ADDRESS: 'address';
+PROVENANCE: 'provenance';
+ADDRESS_IS_NULL: 'address_is_null';
+READ_PROVENANCE: 'read_provenance';
+RET: 'ret';
+INF: 'inf';
+NORM: 'norm';
+SUB: 'sub';
+ZERO: 'zero';
+ALL: 'all';
+SNAN: 'snan';
+QNAN: 'qnan';
+NINF: 'ninf';
+NNORM: 'nnorm';
+NSUB: 'nsub';
+NZERO: 'nzero';
+PZERO: 'pzero';
+PSUB: 'psub';
+PNORM: 'pnorm';
+PINF: 'pinf';
+ALIGNSTACK: 'alignstack';
+ALLOCALIGN: 'allocalign';
+ALLOCPTR: 'allocptr';
+READNONE: 'readnone';
+READONLY: 'readonly';
+WRITEONLY: 'writeonly';
+WRITABLE: 'writable';
+INITIALIZES: 'initializes';
+DEAD_ON_UNWIND: 'dead_on_unwind';
+DEAD_ON_RETURN: 'dead_on_return';
+RANGE: 'range';
+SECTION: 'section';
+PARTITION: 'partition';
+COMDAT: 'comdat';
+ALIGN: 'align';
+CODE_MODEL: 'code_model';
+NO_SANITIZE_ADDRESS: 'no_sanitize_address';
+NO_SANITIZE_HWADDRESS: 'no_sanitize_hwaddress';
+SANITIZE_ADDRESS_DYNINIT: 'sanitize_address_dyninit';
+SANITIZE_MEMTAG: 'sanitize_memtag';
+VSCALE: 'vscale';
+PREFIX: 'prefix';
+PROLOGUE: 'prologue';
+GC: 'gc';
+LABEL: 'label';
+RET: 'ret';
+BR: 'br';
+SWITCH: 'switch';
+INDIRECTBR: 'indirectbr';
+INVOKE: 'invoke';
+
+NEW_LINE: ( '\n' | '\r' )+;
+
+@skip
+LINE_COMMENT: ';' [^\r\n]* ;
+
+@skip
+SPACE: ( ' ' | '\t' )*;
+
+COLON: ':';
+COMMA: ',';
+DOT: '.';
+EQUALS: '=';
+EXCLAM: '!';
+QUEST: '?';
+SEMICOLON: ';';
+
+LBRACE: '{';
+LBRACK: '[';
+LPAREN: '(';
+RBRACE: '}';
+RBRACK: ']';
+RPAREN: ')';
+LANGLE: '<';
+RANGLE: '>';
+DOTS: '...';
+STAR: '*';
+XLIT: [xX];
+NULL: 'null';
