@@ -17,33 +17,31 @@ global_struct_decl: IDENTIFIER EQUALS struct_type_decl NEW_LINE;
 global_target_decl: TARGET (DATALAYOUT | TRIPLE) EQUALS STRING_LITERAL NEW_LINE;
 global_srcname_decl: SRC_FILENAME EQUALS STRING_LITERAL NEW_LINE;
 global_func_decl: DECLARE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? NEW_LINE;
-global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? LBRACE NEW_LINE RBRACE;
+global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? addr_space? function_attrib* (SECTION STRING_LITERAL)? (PARTITION STRING_LITERAL)? (COMDAT (IDENTIFIER)?)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? (PERSONALITY const)? (metadata)* NUMBERING? LBRACE NEW_LINE basic_block* RBRACE;
 
-basic_block : label instr+ NEW_LINE;
+basic_block : label_decl? instr+;
 
 instr
-  : ret_instr
-  | br_instr
-  | indirectbr_instr
-  ;
+  : ( ret_instr
+   | br_instr
+   | indirectbr_instr
+  ) (COMMA metadata)* NEW_LINE;
 
 ret_instr
-  : RET type value NEW_LINE
-  | RET VOID NEW_LINE
+  : RET (type IDENTIFIER | const)
+  | RET VOID
   ;
 
 br_instr
-  : BR LABEL IDENTIFIER NEW_LINE
-  | BR type IDENTIFIER COMMA LABEL IDENTIFIER COMMA LABEL IDENTIFIER NEW_LINE
+  : BR LABEL IDENTIFIER
+  | BR type IDENTIFIER COMMA LABEL IDENTIFIER COMMA LABEL IDENTIFIER
   ;
 
-switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type constant COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK NEW_LINE;
+switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type const COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK;
 
-indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK NEW_LINE;
+indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK;
 
-label_list: LABEL IDENTIFIER;
-
-invoke_instr: INVOKE (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN NEW_LINE;
+invoke_instr: INVOKE (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
 
 decl_attr
   : SECTION STRING_LITERAL
@@ -139,15 +137,15 @@ type
   | float_type
   | ptr_type
   | LABEL
-  | IDENTIFIER;
-type_list : type (COMMA type)*;
-
-value:
-  : const
   | IDENTIFIER
   ;
 
-label: [A-Za-z0-9]+ COLON;
+type_list: type (COMMA type)*;
+
+value
+  : const
+  | IDENTIFIER
+  ;
 
 int_literal
   : HEXA_LITERAL
@@ -168,15 +166,17 @@ vector_constant: LANGLE const_list RANGLE;
 ptr_constant: NULL;
 
 const
-  : EXCLAM? 
-  (  (float_type float_literal)
+  :  (float_type float_literal)
    | (INT_TYPE int_literal) 
    | (literal_struct_type struct_constant)
    | (array_type array_constant)
    | (vector_type vector_constant)
    | (array_type STRING_LITERAL)
    | (ptr_type ptr_constant?)
-   | (ZEROINITIALIZER) );
+   | (ZEROINITIALIZER) 
+   | (METADATA metadata)
+   ;
+
 const_list: const (COMMA const)*;
 
 by_val: BYVAL LPAREN type RPAREN;
@@ -200,6 +200,13 @@ initialize_el: LPAREN int_literal COMMA int_literal RPAREN;
 initialize_el_list: initialize_el (COMMA initialize_el)*;
 initializes: INITIALIZES LPAREN initialize_el_list RPAREN;
 range: RANGE LPAREN type const COMMA const RPAREN;
+allocfamily: STRING_LITERAL EQUALS STRING_LITERAL;
+uwtable: UWTABLE (LPAREN (SYNC | ASYNC) RPAREN)?;
+allockind: ALLOCKIND LPAREN STRING_LITERAL RPAREN;
+allocsize: ALLOCSIZE LPAREN int_literal (COMMA int_literal)* RPAREN;
+memory: MEMORY LPAREN (NONE | READ | WRITE | READWRITE | (ARGMEM COLON READ) | (ARGMEM COLON READ COMMA INACCESSIBLEMEM COLON WRITE) | (ARGMEM COLON READ COMMA ERRNOMEM COLON WRITE) | (READ COMMA ARGMEM COLON READWRITE) | (READWRITE COMMA ARGMEM COLON NONE)) RPAREN;
+vscale_range: VSCALE_RANGE LPAREN int_literal (COMMA int_literal)? RPAREN;
+
 param_attrib
   : ZEROEXT
   | SIGNEXT
@@ -240,22 +247,108 @@ param_attrib
   | range
   ;
 
+function_attrib
+  : alignstack
+  | allocfamily
+  | allockind
+  | allocsize
+  | ALWAYSINLINE
+  | BUILTIN
+  | COLD
+  | CONVERGENT
+  | DISABLE_SANITIZER_INSTRUMENTATION
+  | STRING_LITERAL
+  | FN_RET_THUNK_EXTERN
+  | HOT
+  | INLINEHINT
+  | JUMPTABLE
+  | memory
+  | MINSIZE
+  | NAKED
+  | NOJUMPTABLES
+  | NOBUILTIN
+  | NOCALLBACK
+  | NODIVERGENCESOURCE
+  | NODUPLICATE
+  | NOFREE
+  | NOIMPLICITFLOAT
+  | NOINLINE
+  | NOMERGE
+  | NONLAZYBIND
+  | NOPROFILE
+  | SKIPPROFILE
+  | NOREDZONE
+  | INDIRECTTLSSEGREFS
+  | NORETURN
+  | NORECURSE
+  | WILLRETURN
+  | NOSYNC
+  | NOUNWIND
+  | NOSANITIZEBOUNDS
+  | NOSANITIZECOVERAGE
+  | NULL_POINTER_IS_VALID
+  | OPTDEBUG
+  | OPTFORFUZZING
+  | OPTNONE
+  | OPTSIZE
+  | RETURNSTWICE
+  | SAFESTACK
+  | SANITIZE_ADDRESS
+  | SANITIZE_MEMORY
+  | SANITIZE_THREAD
+  | SANITIZE_HWADDRESS
+  | SANITIZE_MEMTAG
+  | SANITIZE_REALTIME
+  | SANITIZE_REALTIME_BLOCKING
+  | SANITIZE_ALLOC_TOKEN
+  | SPECULATIVE_LOAD_HARDENING
+  | SPECULATABLE
+  | SSP
+  | SSPSTRONG
+  | SSPREQ
+  | STRICTFP
+  | uwtable
+  | NOCF_CHECK
+  | SHADOWCALLSTACK
+  | MUSTPROGRESS
+  | vscale_range
+  | NOCREATEUNDEFORPOISON
+  | VECTOR_FUNCTION_ABI_VARIANT
+  | preallocated
+  ;
+
+
 arg_decl
   : DOTS
-  | type (param_attrib)*
+  | type (param_attrib)* IDENTIFIER?
   ;
-arg_list: arg_decl* (COMMA arg_decl)*;
+arg_list: arg_decl (COMMA arg_decl)*;
 
 param_decl: type (param_attrib)* value;
 param_list: param_decl* (COMMA param_decl)*;
+
+meta_string: DISTINCT? EXCLAM STRING_LITERAL;
+meta_number: DISTINCT? EXCLAM int_literal;
+meta_tuple: DISTINCT? EXCLAM LBRACE (metadata|const) (COMMA (metadata|const))* RBRACE;
+meta_debug: DISTINCT? EXCLAM DBG metadata;
+meta_loop: EXCLAM LLVM_LOOP metadata;
+metadata
+  : meta_string
+  | meta_tuple
+  | meta_number
+  | meta_debug
+  | meta_loop
+  ;
 
 STRING_LITERAL: ('c')? '"' [^"]* '"';
 CHAR_LITERAL: '\'' [^'] '\'';
 DECIMAL_LITERAL: ('-')? (([1-9] [0-9]*) | '0' | 'true' | 'false');
 HEXA_LITERAL: [us] '0' [xX] [0-9a-fA-F]+;
 FLOAT_LITERAL: ('-')?[0-9]*'.'[0-9]+('e'('+'|'-')[0-9]+)?;
-FLOAT_HEXA_LITERAL: '0' [xX] [MLHR]? [0-9a-fA-F]+ ;
-IDENTIFIER: [%@$][-a-zA-Z$._][-a-zA-Z$._0-9]*;
+FLOAT_HEXA_LITERAL: '0' [xX] [MLHR]? [0-9a-fA-F]+;
+IDENTIFIER: [%@$][-a-zA-Z$._0-9][-a-zA-Z$._0-9]*;
+LABEL_DECL: [A-Za-z0-9]+ ':';
+label_decl: LABEL_DECL NEW_LINE;
 
 PRIVATE: 'private';
 INTERNAL: 'internal';
@@ -273,6 +366,9 @@ CONSTANT: 'constant';
 GLOBAL: 'global';
 UNDEF: 'undef';
 ZEROINITIALIZER: 'zeroinitializer';
+METADATA: 'metadata';
+DISTINCT: 'distinct'; 
+LLVM_LOOP: 'llvm.loop';
 
 LOCALDYNAMIC: 'localdynamic';
 INITIALEXEC: 'initialexec';
@@ -301,6 +397,8 @@ PROTECTED: 'protected';
 DLLIMPORT: 'dllimport';
 DLLEXPORT: 'dllexport';
 
+DBG: 'dbg';
+
 EXTERNALLY_INITIALIZED: 'externally_initialized';
 
 TYPE: 'type';
@@ -326,7 +424,6 @@ ELEMENTTYPE: 'elementtype';
 NOALIAS: 'noalias';
 CAPTURES: 'captures';
 NOCAPTURE: 'nocapture';
-NOFREE: 'nofree';
 NEST: 'nest';
 RETURNED: 'returned';
 NONNULL: 'nonnull';
@@ -344,7 +441,7 @@ ADDRESS: 'address';
 PROVENANCE: 'provenance';
 ADDRESS_IS_NULL: 'address_is_null';
 READ_PROVENANCE: 'read_provenance';
-RET: 'ret';
+PERSONALITY: 'personality';
 INF: 'inf';
 NORM: 'norm';
 SUB: 'sub';
@@ -362,11 +459,86 @@ PNORM: 'pnorm';
 PINF: 'pinf';
 ALIGNSTACK: 'alignstack';
 ALLOCALIGN: 'allocalign';
+ALLOCKIND: 'allockind';
+ALLOCSIZE: 'allocsize';
 ALLOCPTR: 'allocptr';
+ALWAYSINLINE: 'alwaysinline';
+BUILTIN: 'builtin';
+COLD: 'cold';
+CONVERGENT: 'convergent';
+DISABLE_SANITIZER_INSTRUMENTATION: 'disable_sanitizer_instrumentation';
+FN_RET_THUNK_EXTERN: 'fn_ret_thunk_extern';
+HOT: 'hot';
+INLINEHINT: 'inlinehint';
+JUMPTABLE: 'jumptable';
+MEMORY: 'memory';
+READ: 'read';
+WRITE: 'write';
+READWRITE: 'readwrite';
 READNONE: 'readnone';
 READONLY: 'readonly';
 WRITEONLY: 'writeonly';
 WRITABLE: 'writable';
+ARGMEM: 'argmem';
+INACCESSIBLEMEM: 'inaccessiblemem';
+ERRNOMEM: 'errnomem';
+TARGETMEM: 'targetmem';
+MINSIZE: 'minsize';
+NAKED: 'naked';
+NOJUMPTABLES: 'no-jump-tables';
+NOBUILTIN: 'nobuiltin';
+NOCALLBACK: 'nocallback';
+NODIVERGENCESOURCE: 'nodivergencesource';
+NODUPLICATE: 'noduplicate';
+NOFREE: 'nofree';
+NOIMPLICITFLOAT: 'noimplicitfloat';
+NOINLINE: 'noinline';
+NOMERGE: 'nomerge';
+NONLAZYBIND: 'nonlazybind';
+NOPROFILE: 'noprofile';
+SKIPPROFILE: 'skipprofile';
+NOREDZONE: 'noredzone';
+INDIRECTTLSSEGREFS: 'indirect-tls-seg-refs';
+NORETURN: 'noreturn';
+NORECURSE: 'norecurse';
+WILLRETURN: 'willreturn';
+NOSYNC: 'nosync';
+NOUNWIND: 'nounwind';
+NOSANITIZEBOUNDS: 'nosanitize_bounds';
+NOSANITIZECOVERAGE: 'nosanitize_coverage';
+NULL_POINTER_IS_VALID: 'null_pointer_is_valid';
+OPTDEBUG: 'optdebug';
+OPTFORFUZZING: 'optforfuzzing';
+OPTNONE: 'optnone';
+OPTSIZE: 'optsize';
+RETURNSTWICE: 'returns_twice';
+SAFESTACK: 'safestack';
+SANITIZE_ADDRESS: 'sanitize_address';
+SANITIZE_MEMORY: 'sanitize_memory';
+SANITIZE_THREAD: 'sanitize_thread';
+SANITIZE_HWADDRESS: 'sanitize_hwaddress';
+SANITIZE_REALTIME: 'sanitize_realtime';
+SANITIZE_REALTIME_BLOCKING: 'sanitize_realtime_blocking';
+SANITIZE_ALLOC_TOKEN: 'sanitize_alloc_token';
+SANITIZE_ADDRESS_DYNINIT: 'sanitize_address_dyninit';
+SANITIZE_MEMTAG: 'sanitize_memtag';
+NO_SANITIZE_ADDRESS: 'no_sanitize_address';
+NO_SANITIZE_HWADDRESS: 'no_sanitize_hwaddress';
+SPECULATIVE_LOAD_HARDENING: 'speculative_load_hardening';
+SPECULATABLE: 'speculatable'; 
+SSP: 'ssp';
+SSPSTRONG: 'sspstrong';
+SSPREQ: 'sspreq';
+STRICTFP: 'strictfp';
+UWTABLE: 'uwtable';
+SYNC: 'sync';
+ASYNC: 'async';
+NOCF_CHECK: 'nocf_check';
+SHADOWCALLSTACK: 'shadowcallstack';
+MUSTPROGRESS: 'mustprogress';
+VSCALE_RANGE: 'vscale_range';
+NOCREATEUNDEFORPOISON: 'nocreateundeforpoison';
+VECTOR_FUNCTION_ABI_VARIANT: 'vector-function-abi-variant';
 INITIALIZES: 'initializes';
 DEAD_ON_UNWIND: 'dead_on_unwind';
 DEAD_ON_RETURN: 'dead_on_return';
@@ -376,10 +548,6 @@ PARTITION: 'partition';
 COMDAT: 'comdat';
 ALIGN: 'align';
 CODE_MODEL: 'code_model';
-NO_SANITIZE_ADDRESS: 'no_sanitize_address';
-NO_SANITIZE_HWADDRESS: 'no_sanitize_hwaddress';
-SANITIZE_ADDRESS_DYNINIT: 'sanitize_address_dyninit';
-SANITIZE_MEMTAG: 'sanitize_memtag';
 VSCALE: 'vscale';
 PREFIX: 'prefix';
 PROLOGUE: 'prologue';
@@ -390,14 +558,16 @@ BR: 'br';
 SWITCH: 'switch';
 INDIRECTBR: 'indirectbr';
 INVOKE: 'invoke';
+TO: 'to';
+UNWIND: 'unwind';
 
-NEW_LINE: ( '\n' | '\r' )+;
-
-@skip
-LINE_COMMENT: ';' [^\r\n]* ;
+NEW_LINE: (';' [^\r\n]*)? [\r\n]+;
 
 @skip
 SPACE: ( ' ' | '\t' )*;
+
+@skip
+LINE_COMMENT: ';' [^\r\n]*;
 
 COLON: ':';
 COMMA: ',';
