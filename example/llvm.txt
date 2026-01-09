@@ -25,7 +25,59 @@ instr
   : ( ret_instr
    | br_instr
    | indirectbr_instr
-  ) (COMMA metadata)* NEW_LINE;
+   | invoke_instr
+   | callbr_instr
+   | resume_instr
+   | catchswitch_instr
+   | catchret_instr
+   | cleanupret_instr
+   | unreachable_instr
+   | fneg_instr
+   | add_instr
+   | fadd_instr
+   | sub_instr
+   | fsub_instr
+   | mul_instr
+   | fmul_instr
+   | udiv_instr
+   | sdiv_instr
+   | fdiv_instr
+   | urem_instr
+   | srem_instr
+   | frem_instr
+   | shl_instr
+   | lshr_instr
+   | ashr_instr
+   | and_instr
+   | or_instr
+   | xor_instr
+   | extractelement_instr
+   | insertelement_instr
+   | shufflevector_instr
+   | insertvalue_instr
+   | extractvalue_instr
+   | alloca_instr
+   | load_instr
+   | store_instr
+   | fence_instr
+   | cmpxchg_instr
+   | atomicrmw_instr
+   | getelementptr_instr
+   | trunc_instr
+   | zext_instr
+   | sext_instr
+   | fptrunc_instr
+   | fpext_instr
+   | fptoui_instr
+   | fptosi_instr
+   | uitofp_instr
+   | sitofp_instr
+   | ptrtoint_instr
+   | ptrtoaddr_instr
+   | inttoptr_instr
+   | bitcast_instr
+   | addrspacecast_instr
+) (COMMA metadata)* NEW_LINE;
 
 ret_instr
   : RET (type IDENTIFIER | const)
@@ -42,6 +94,76 @@ switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type const COMMA 
 indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK;
 
 invoke_instr: INVOKE (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
+
+callbr_instr: CALLBR (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER+;
+
+resume_instr: RESUME type value;
+
+catchswitch_instr: CATCHSWITCH WITHIN (IDENTIFIER | NONE) (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*)? UNWIND (TO CALLER | LABEL IDENTIFIER);
+
+catchret_instr: CATCHRET FROM IDENTIFIER TO LABEL IDENTIFIER;
+
+cleanupret_instr: CLEANUPRET FROM value UNWIND (LABEL IDENTIFIER | TO CALLER);
+
+unreachable_instr: UNREACHABLE;
+
+fneg_instr: IDENTIFIER EQUALS FNEG fast_math_flag* type value;
+
+add_instr: IDENTIFIER EQUALS ADD ((NUW NSW) | NUW | NSW)? type value COMMA value;
+fadd_instr: IDENTIFIER EQUALS FADD fast_math_flag* type value COMMA value;
+
+sub_instr: IDENTIFIER EQUALS SUB ((NUW NSW) | NUW | NSW)? type value COMMA value;
+fsub_instr: IDENTIFIER EQUALS FSUB fast_math_flag* type value COMMA value;
+
+mul_instr: IDENTIFIER EQUALS MUL ((NUW NSW) | NUW | NSW)? type value COMMA value;
+fmul_instr: IDENTIFIER EQUALS FMUL fast_math_flag* type value COMMA value;
+
+udiv_instr: IDENTIFIER EQUALS UDIV (EXACT)? type value COMMA value;
+sdiv_instr: IDENTIFIER EQUALS SDIV (EXACT)? type value COMMA value;
+fdiv_instr: IDENTIFIER EQUALS FDIV fast_math_flag* type value COMMA value;
+
+urem_instr: IDENTIFIER EQUALS UREM type value COMMA value;
+srem_instr: IDENTIFIER EQUALS SREM type value COMMA value;
+frem_instr: IDENTIFIER EQUALS SREM type value COMMA value;
+
+shl_instr: IDENTIFIER EQUALS SHL ((NUW NSW) | NUW | NSW)? type value COMMA value;
+lshr_instr: IDENTIFIER EQUALS LSHR (EXACT)? type value COMMA value;
+ashr_instr: IDENTIFIER EQUALS ASHR (EXACT)? type value COMMA value;
+
+and_instr: IDENTIFIER EQUALS AND type value COMMA value;
+or_instr: IDENTIFIER EQUALS OR (DISJOINT)? type value COMMA value;
+xor_instr: IDENTIFIER EQUALS XOR (DISJOINT)? type value COMMA value;
+
+extractelement_instr: IDENTIFIER EQUALS EXTRACT_ELEMENT type value COMMA type value;
+insertelement_instr: IDENTIFIER EQUALS INSERT_ELEMENT type value COMMA type value COMMA type value;
+shufflevector_instr: IDENTIFIER EQUALS SHUFFLE_VECTOR type value COMMA type value COMMA type value;
+extractvalue_instr: IDENTIFIER EQUALS EXTRACT_VALUE type value COMMA int_literal (COMMA int_literal);
+insertvalue_instr: IDENTIFIER EQUALS INSERT_VALUE type value COMMA type value COMMA int_literal (COMMA int_literal)*;
+
+alloca_instr: IDENTIFIER EQUALS ALLOCA INALLOCA? type (COMMA type int_literal)? (COMMA align)? (COMMA addr_space)?;
+load_instr: IDENTIFIER EQUALS LOAD (ATOMIC)? (VOLATILE)? type COMMA PTR (ptr_constant | IDENTIFIER) syncscope? ordering? (COMMA align)? (COMMA metadata)*;
+store_instr: STORE (ATOMIC)? (VOLATILE)? type value COMMA PTR (ptr_constant | IDENTIFIER) syncscope? ordering? (COMMA align)? (COMMA metadata)*;
+getelementptr_instr: IDENTIFIER EQUALS GETELEMENTPTR (INBOUNDS | NUSW | NUW | inrange)* type COMMA PTR (ptr_constant | IDENTIFIER) (COMMA type value)*;
+
+fence_instr: FENCE syncscope? ordering;
+cmpxchg_instr: IDENTIFIER EQUALS CMPXCHG WEAK? VOLATILE? PTR (ptr_constant | IDENTIFIER) COMMA type value COMMA type value syncscope? ordering ordering (COMMA align)?;
+atomicrmw_instr: IDENTIFIER EQUALS ATOMICRMW VOLATILE? (XCHG | ADD | SUB | AND | NAND | OR | XOR | MAX | MIN | UMAX | UMIN | FADD | FSUB | FMAX | FMIN | FMAXIMUM | FMINIMUM | UINC_WRAP | UDEC_WRAP | USUB_COND | USUB_SAT) PTR (ptr_constant | IDENTIFIER) COMMA type value syncscope? ordering ordering (COMMA align)?;
+
+trunc_instr: IDENTIFIER EQUALS TRUNC NUW? NSW? type value TO type;
+zext_instr: IDENTIFIER EQUALS ZEXT type value TO type;
+sext_instr: IDENTIFIER EQUALS SEXT type value TO type;
+fptrunc_instr: IDENTIFIER EQUALS FPTRUNC fast_math_flag* type value TO type;
+fpext_instr: IDENTIFIER EQUALS FPEXT fast_math_flag* type value TO type;
+fptoui_instr: IDENTIFIER EQUALS FPTOUI type value TO type;
+fptosi_instr: IDENTIFIER EQUALS FPTOSI type value TO type;
+uitofp_instr: IDENTIFIER EQUALS UITOFP type value TO type;
+sitofp_instr: IDENTIFIER EQUALS SITOFP type value TO type;
+ptrtoint_instr: IDENTIFIER EQUALS PTRTOINT type value TO type;
+ptrtoaddr_instr: IDENTIFIER EQUALS PTRTOADDR type value TO type;
+inttoptr_instr: IDENTIFIER EQUALS INTTOPTR type value TO type;
+bitcast_instr: IDENTIFIER EQUALS BITCAST type value TO type;
+addrspacecast_instr: IDENTIFIER EQUALS ADDRSPACECAST type value TO type;
+
 
 decl_attr
   : SECTION STRING_LITERAL
@@ -143,7 +265,7 @@ type
 type_list: type (COMMA type)*;
 
 value
-  : const
+  : untyped_const
   | IDENTIFIER
   ;
 
@@ -160,10 +282,25 @@ new_ptr_style: PTR (addr_space)?;
 old_ptr_style: type STAR (addr_space)?;
 addr_space: ADDRSPACE LPAREN (STRING_LITERAL | int_literal) RPAREN;
 
+syncscope: SYNCSCOPE LPAREN STRING_LITERAL RPAREN;
+ordering: UNORDERED | MONOTONIC | ACQUIRE | RELEASE | ACQ_REL | SEQ_CST;
+
 struct_constant: LBRACE const_list RBRACE;
 array_constant: LBRACK (const (COMMA const)*) RBRACK;
 vector_constant: LANGLE const_list RANGLE;
 ptr_constant: NULL;
+
+untyped_const
+  :  float_literal
+   | int_literal
+   | struct_constant
+   | array_constant
+   | vector_constant
+   | STRING_LITERAL
+   | ptr_constant
+   | ZEROINITIALIZER
+   | METADATA metadata
+   ;
 
 const
   :  (float_type float_literal)
@@ -317,7 +454,6 @@ function_attrib
   | preallocated
   ;
 
-
 arg_decl
   : DOTS
   | type (param_attrib)* IDENTIFIER?
@@ -327,17 +463,17 @@ arg_list: arg_decl (COMMA arg_decl)*;
 param_decl: type (param_attrib)* value;
 param_list: param_decl* (COMMA param_decl)*;
 
+inrange: INRANGE LPAREN int_literal COMMA int_literal RPAREN;
+
 meta_string: DISTINCT? EXCLAM STRING_LITERAL;
 meta_number: DISTINCT? EXCLAM int_literal;
 meta_tuple: DISTINCT? EXCLAM LBRACE (metadata|const) (COMMA (metadata|const))* RBRACE;
-meta_debug: DISTINCT? EXCLAM DBG metadata;
-meta_loop: EXCLAM LLVM_LOOP metadata;
+meta_node: DISTINCT? EXCLAM (DBG | NONTEMPORAL | LLVM_LOOP | INVARIANT_GROUP | LLVM_ACCESS_GROUP | IRR_LOOP | INVARIANT_GROUP | CALLEE_TYPE | ASSOCIATED | PROF | ANNOTATION | FUNC_SANITIZE | KCFI_TYPE | MEMPROF | CALLSITE | NOALIAS_ADDRSPACE | MMRA | ALLOC_TOKEN | NOUNDEF | ALIGN | DEREFERENCEABLE | DEREFERENCEABLE_OR_NULL | NONNULL | TBAA) metadata;
 metadata
   : meta_string
   | meta_tuple
   | meta_number
-  | meta_debug
-  | meta_loop
+  | meta_node
   ;
 
 STRING_LITERAL: ('c')? '"' [^"]* '"';
@@ -350,6 +486,22 @@ IDENTIFIER: [%@$][-a-zA-Z$._0-9][-a-zA-Z$._0-9]*;
 LABEL_DECL: [A-Za-z0-9]+ ':';
 label_decl: LABEL_DECL NEW_LINE;
 
+fast_math_flag
+  : FAST
+  | NNAN
+  | NINF
+  | NSZ
+  ;
+
+FAST: 'fast';
+NNAN: 'nnan';
+NINF: 'ninf';
+NSZ: 'nsz';
+EXACT: 'exact';
+NUW: 'nuw';
+NSW: 'nsw';
+NUSW: 'nusw';
+
 PRIVATE: 'private';
 INTERNAL: 'internal';
 AVAILABLE_EXTERNALLY: 'available_externally';
@@ -361,6 +513,15 @@ EXTERN_WEAK: 'extern_weak';
 LINKONCE_ODR: 'linkonce_odr';
 WEAK_ODR: 'weak_odr';
 EXTERNAL: 'external';
+ATOMIC: 'atomic';
+SYNCSCOPE: 'syncscope';
+UNORDERED: 'unordered';
+MONOTONIC: 'monotonic';
+ACQUIRE: 'acquire';
+RELEASE: 'release';
+ACQ_REL: 'acq_rel';
+SEQ_CST: 'seq_cst';
+TBAA: 'tbaa';
 
 CONSTANT: 'constant';
 GLOBAL: 'global';
@@ -368,7 +529,25 @@ UNDEF: 'undef';
 ZEROINITIALIZER: 'zeroinitializer';
 METADATA: 'metadata';
 DISTINCT: 'distinct'; 
+
+DBG: 'dbg';
 LLVM_LOOP: 'llvm.loop';
+LLVM_ACCESS_GROUP: 'llvm.access.group';
+IRR_LOOP: 'irr_loop';
+INVARIANT_GROUP: 'invariant.group';
+CALLEE_TYPE: 'callee_type';
+ASSOCIATED: 'associated';
+PROF: 'prof';
+ANNOTATION: 'annotation';
+FUNC_SANITIZE: 'func_sanitize';
+KCFI_TYPE: 'kcfi_type';
+MEMPROF: 'memprof';
+CALLSITE: 'callsite';
+NOALIAS_ADDRSPACE: 'noalias.addrspace';
+MMRA: 'mmra';
+ALLOC_TOKEN: 'alloc_token';
+NONTEMPORAL: 'nontemporal';
+INVARIANT_LOAD: 'invariant.load';
 
 LOCALDYNAMIC: 'localdynamic';
 INITIALEXEC: 'initialexec';
@@ -396,8 +575,6 @@ PROTECTED: 'protected';
 
 DLLIMPORT: 'dllimport';
 DLLEXPORT: 'dllexport';
-
-DBG: 'dbg';
 
 EXTERNALLY_INITIALIZED: 'externally_initialized';
 
@@ -444,12 +621,11 @@ READ_PROVENANCE: 'read_provenance';
 PERSONALITY: 'personality';
 INF: 'inf';
 NORM: 'norm';
-SUB: 'sub';
 ZERO: 'zero';
+FROM: 'from';
 ALL: 'all';
 SNAN: 'snan';
 QNAN: 'qnan';
-NINF: 'ninf';
 NNORM: 'nnorm';
 NSUB: 'nsub';
 NZERO: 'nzero';
@@ -560,6 +736,77 @@ INDIRECTBR: 'indirectbr';
 INVOKE: 'invoke';
 TO: 'to';
 UNWIND: 'unwind';
+CALLBR: 'callbr';
+RESUME: 'resume';
+CATCHSWITCH: 'catchswitch';
+WITHIN: 'within';
+CALLER: 'caller';
+CATCHRET: 'catchret';
+CLEANUPRET: 'cleanupret';
+UNREACHABLE: 'unreachable';
+FNEG: 'fneg';
+ADD: 'add';
+FADD: 'fadd';
+SUB: 'sub';
+FSUB: 'fsub';
+MUL: 'mul';
+FMUL: 'fmul';
+UDIV: 'udiv';
+SDIV: 'sdiv';
+FDIV: 'fdiv';
+UREM: 'urem';
+SREM: 'srem';
+FREM: 'frem';
+SHL: 'shl';
+LSHR: 'lshr';
+ASHR: 'ashr';
+AND: 'and';
+OR: 'or';
+DISJOINT: 'disjoint';
+XOR: 'xor';
+EXTRACT_ELEMENT: 'extractelement';
+INSERT_ELEMENT: 'insertelement';
+SHUFFLE_VECTOR: 'shufflevector';
+EXTRACT_VALUE: 'extractvalue';
+INSERT_VALUE: 'insertvalue';
+ALLOCA: 'alloca';
+LOAD: 'load';
+STORE: 'store';
+VOLATILE: 'volatile';
+FENCE: 'fence';
+CMPXCHG: 'cmpxchg';
+ATOMICRMW: 'atomicrmw';
+GETELEMENTPTR: 'getelementptr';
+INBOUNDS: 'inbounds';
+INRANGE: 'inrange';
+XCHG: 'xchg';
+NAND: 'nand';
+MAX: 'max';
+MIN: 'min';
+UMAX: 'umax';
+UMIN: 'umin';
+FMAX: 'fmax';
+FMIN: 'fmin';
+FMAXIMUM: 'fmaximum';
+FMINIMUM: 'fminimum';
+UINC_WRAP: 'uinc_wrap';
+UDEC_WRAP: 'udec_wrap';
+USUB_COND: 'usub_cond';
+USUB_SAT: 'usub_sat';
+TRUNC: 'trunc';
+ZEXT: 'zext';
+SEXT: 'sext';
+FPTRUNC: 'fptrunc';
+FPEXT: 'fpext';
+FPTOUI: 'fptoui';
+FPTOSI: 'fptosi';
+UITOFP: 'uitofp';
+SITOFP: 'sitofp';
+PTRTOINT: 'ptrtoint';
+PTRTOADDR: 'ptrtoaddr';
+INTTOPTR: 'inttoptr';
+BITCAST: 'bitcast';
+ADDRSPACECAST: 'addrspacecast';
 
 NEW_LINE: (';' [^\r\n]*)? [\r\n]+;
 
