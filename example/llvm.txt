@@ -77,6 +77,9 @@ instr
    | inttoptr_instr
    | bitcast_instr
    | addrspacecast_instr
+   | icmp_instr
+   | fcmp_instr
+   | phi_instr
 ) (COMMA metadata)* NEW_LINE;
 
 ret_instr
@@ -164,6 +167,33 @@ inttoptr_instr: IDENTIFIER EQUALS INTTOPTR type value TO type;
 bitcast_instr: IDENTIFIER EQUALS BITCAST type value TO type;
 addrspacecast_instr: IDENTIFIER EQUALS ADDRSPACECAST type value TO type;
 
+condition
+  : EQ
+  | NE
+  | UGT
+  | UGE
+  | ULT
+  | ULE
+  | SGT
+  | SGE
+  | SLT
+  | SLE
+  | FALSE
+  | OEQ
+  | OGT
+  | OGE
+  | OLT
+  | ONE
+  | ORD
+  | UEQ
+  | UNE
+  | UNO
+  | TRUE
+  ;
+icmp_instr: IDENTIFIER EQUALS ICMP SAMESIGN? condition type value COMMA value;
+fcmp_instr: IDENTIFIER EQUALS FCMP fast_math_flag* condition type value COMMA value;
+
+phi_instr: IDENTIFIER EQUALS PHI fast_math_flag* type LBRACK type COMMA IDENTIFIER RBRACK (COMMA LBRACK type COMMA IDENTIFIER RBRACK)*;
 
 decl_attr
   : SECTION STRING_LITERAL
@@ -807,6 +837,38 @@ PTRTOADDR: 'ptrtoaddr';
 INTTOPTR: 'inttoptr';
 BITCAST: 'bitcast';
 ADDRSPACECAST: 'addrspacecast';
+ICMP: 'icmp';
+FCMP: 'fcmp';
+EQ: 'eq';
+NE: 'ne';
+UGT: 'ugt';
+UGE: 'uge';
+ULT: 'ult';
+ULE: 'ule';
+SGT: 'sgt';
+SGE: 'sge';
+SLT: 'slt';
+SLE: 'sle';
+FALSE: 'false';
+OEQ: 'oeq';
+OGT: 'ogt';
+OGE: 'oge';
+OLT: 'olt';
+ONE: 'one';
+ORD: 'ord';
+UEQ: 'ueq';
+UNE: 'une';
+UNO: 'uno';
+TRUE: 'true';
+PHI: 'phi';
+SAMESIGN: 'samesign';
+SELECT: 'select';
+FREEZE: 'freeze';
+CALL: 'call';
+VA_ARG: 'va_arg';
+LANDINGPAD: 'landingpad';
+CATCHPAD: 'catchpad';
+CLEANUPPAD: 'cleanuppad';
 
 NEW_LINE: (';' [^\r\n]*)? [\r\n]+;
 
