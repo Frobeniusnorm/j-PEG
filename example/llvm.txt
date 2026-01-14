@@ -8,16 +8,20 @@ global_decl
   | global_srcname_decl
   | global_func_decl
   | global_func_def
+  | global_attribute_def
+  | global_metadata
   ;
 
 global_var_decl: IDENTIFIER EQUALS (linkage)? (preemption)? (visibility)? (dll_storage)? (storage_model)? (UNNAMED_ADDR)? (addr_space)? (EXTERNALLY_INITIALIZED)? (GLOBAL | CONSTANT) (const | type) (COMMA decl_attr)* NEW_LINE
   ; 
 
+global_metadata: meta_ident EQUALS metadata;
+global_attribute_def: ATTRIBUTES NUMBERING EQUALS LBRACE function_attrib* RBRACE NEW_LINE;
 global_struct_decl: IDENTIFIER EQUALS struct_type_decl NEW_LINE;
 global_target_decl: TARGET (DATALAYOUT | TRIPLE) EQUALS STRING_LITERAL NEW_LINE;
 global_srcname_decl: SRC_FILENAME EQUALS STRING_LITERAL NEW_LINE;
-global_func_decl: DECLARE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? NEW_LINE;
-global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? (STRING_LITERAL)? (param_attrib)* type IDENTIFIER LPAREN arg_list RPAREN (UNNAMED_ADDR)? addr_space? function_attrib* (SECTION STRING_LITERAL)? (PARTITION STRING_LITERAL)? (COMDAT (IDENTIFIER)?)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? (PERSONALITY const)? (metadata)* NUMBERING? LBRACE NEW_LINE basic_block* RBRACE;
+global_func_decl: DECLARE (linkage)? (preemption)? (visibility)? (dll_storage)? calling_convention? (param_attrib)* type IDENTIFIER LPAREN arg_list? RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? NEW_LINE;
+global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? calling_convention? (param_attrib)* type IDENTIFIER LPAREN arg_list? RPAREN (UNNAMED_ADDR)? addr_space? function_attrib* (SECTION STRING_LITERAL)? (PARTITION STRING_LITERAL)? (COMDAT (IDENTIFIER)?)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? (PERSONALITY const)? (metadata)* NUMBERING? LBRACE NEW_LINE basic_block* RBRACE;
 
 basic_block : label_decl? instr+;
 
@@ -80,6 +84,13 @@ instr
    | icmp_instr
    | fcmp_instr
    | phi_instr
+   | select_instr
+   | freeze_instr
+   | call_instr
+   | vaarg_instr
+   | landingpad_instr
+   | catchpad_instr
+   | cleanuppad_instr
 ) (COMMA metadata)* NEW_LINE;
 
 ret_instr
@@ -92,13 +103,30 @@ br_instr
   | BR type IDENTIFIER COMMA LABEL IDENTIFIER COMMA LABEL IDENTIFIER
   ;
 
+calling_convention
+  : CCC
+  | FASTCC
+  | COLDCC
+  | GHCCC
+  | ANYREGCC
+  | PRESERVE_MOSTCC
+  | PRESERVE_ALLCC
+  | PRESERVE_NONECC
+  | CXX_FAST_TLSCC
+  | TAILCC
+  | SWIFTCC
+  | SWIFTTAILCC
+  | CFGUARD_CHECKCC
+  | STRING_LITERAL
+  ; 
+
 switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type const COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK;
 
 indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK;
 
-invoke_instr: INVOKE (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
+invoke_instr: INVOKE calling_convention? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
 
-callbr_instr: CALLBR (STRING_LITERAL)? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER+;
+callbr_instr: CALLBR calling_convention? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER+;
 
 resume_instr: RESUME type value;
 
@@ -194,6 +222,21 @@ icmp_instr: IDENTIFIER EQUALS ICMP SAMESIGN? condition type value COMMA value;
 fcmp_instr: IDENTIFIER EQUALS FCMP fast_math_flag* condition type value COMMA value;
 
 phi_instr: IDENTIFIER EQUALS PHI fast_math_flag* type LBRACK type COMMA IDENTIFIER RBRACK (COMMA LBRACK type COMMA IDENTIFIER RBRACK)*;
+select_instr: IDENTIFIER EQUALS SELECT fast_math_flag* type value COMMA type value COMMA type value;
+
+freeze_instr: IDENTIFIER EQUALS FREEZE type value;
+
+call_instr: IDENTIFIER EQUALS (TAIL | MUSTTAIL | NOTAIL)? CALL fast_math_flag* calling_convention? param_attrib* addr_space? type value LPAREN param_list RPAREN function_attrib*;
+
+vaarg_instr: IDENTIFIER EQUALS VA_ARG type value COMMA type;
+
+clause
+  : CATCH type value
+  | FILTER type value
+  ;
+landingpad_instr: IDENTIFIER EQUALS LANDINGPAD type CLEANUP? clause*;
+catchpad_instr: IDENTIFIER EQUALS CATCHPAD WITHIN (IDENTIFIER | NONE) (LBRACK (type value (COMMA type value)*)? RBRACK)?;
+cleanuppad_instr: IDENTIFIER EQUALS CLEANUPPAD WITHIN IDENTIFIER (LBRACK (type value (COMMA type value)*)? RBRACK)?;
 
 decl_attr
   : SECTION STRING_LITERAL
@@ -495,10 +538,11 @@ param_list: param_decl* (COMMA param_decl)*;
 
 inrange: INRANGE LPAREN int_literal COMMA int_literal RPAREN;
 
+meta_ident: EXCLAM (DBG | NONTEMPORAL | LLVM_LOOP | INVARIANT_GROUP | LLVM_ACCESS_GROUP | IRR_LOOP | INVARIANT_GROUP | CALLEE_TYPE | ASSOCIATED | PROF | ANNOTATION | FUNC_SANITIZE | KCFI_TYPE | MEMPROF | CALLSITE | NOALIAS_ADDRSPACE | MMRA | ALLOC_TOKEN | NOUNDEF | ALIGN | DEREFERENCEABLE | DEREFERENCEABLE_OR_NULL | NONNULL | TBAA | ALIASSCOPE | LLVM_IDENT | LLVM_MODULE_FLAGS);
 meta_string: DISTINCT? EXCLAM STRING_LITERAL;
 meta_number: DISTINCT? EXCLAM int_literal;
 meta_tuple: DISTINCT? EXCLAM LBRACE (metadata|const) (COMMA (metadata|const))* RBRACE;
-meta_node: DISTINCT? EXCLAM (DBG | NONTEMPORAL | LLVM_LOOP | INVARIANT_GROUP | LLVM_ACCESS_GROUP | IRR_LOOP | INVARIANT_GROUP | CALLEE_TYPE | ASSOCIATED | PROF | ANNOTATION | FUNC_SANITIZE | KCFI_TYPE | MEMPROF | CALLSITE | NOALIAS_ADDRSPACE | MMRA | ALLOC_TOKEN | NOUNDEF | ALIGN | DEREFERENCEABLE | DEREFERENCEABLE_OR_NULL | NONNULL | TBAA) metadata;
+meta_node: DISTINCT? meta_ident metadata;
 metadata
   : meta_string
   | meta_tuple
@@ -552,6 +596,7 @@ RELEASE: 'release';
 ACQ_REL: 'acq_rel';
 SEQ_CST: 'seq_cst';
 TBAA: 'tbaa';
+ALIASSCOPE: 'alias.scope';
 
 CONSTANT: 'constant';
 GLOBAL: 'global';
@@ -559,7 +604,10 @@ UNDEF: 'undef';
 ZEROINITIALIZER: 'zeroinitializer';
 METADATA: 'metadata';
 DISTINCT: 'distinct'; 
+ATTRIBUTES: 'attributes';
 
+LLVM_MODULE_FLAGS: 'llvm.module.flags';
+LLVM_IDENT: 'llvm.ident';
 DBG: 'dbg';
 LLVM_LOOP: 'llvm.loop';
 LLVM_ACCESS_GROUP: 'llvm.access.group';
@@ -607,6 +655,20 @@ DLLIMPORT: 'dllimport';
 DLLEXPORT: 'dllexport';
 
 EXTERNALLY_INITIALIZED: 'externally_initialized';
+
+CCC: 'ccc';
+FASTCC: 'fastcc';
+COLDCC: 'coldcc';
+GHCCC: 'ghccc';
+ANYREGCC: 'anyregcc';
+PRESERVE_MOSTCC: 'preserve_mostcc';
+PRESERVE_ALLCC: 'preserve_allcc';
+PRESERVE_NONECC: 'preserve_nonecc';
+CXX_FAST_TLSCC: 'cxx_fast_tlscc';
+TAILCC: 'tailcc';
+SWIFTCC: 'swiftcc';
+SWIFTTAILCC: 'swifttailcc';
+CFGUARD_CHECKCC: 'cfguard_checkcc';
 
 TYPE: 'type';
 OPAQUE: 'opaque';
@@ -869,6 +931,12 @@ VA_ARG: 'va_arg';
 LANDINGPAD: 'landingpad';
 CATCHPAD: 'catchpad';
 CLEANUPPAD: 'cleanuppad';
+TAIL: 'tail';
+MUSTTAIL: 'musttail';
+NOTAIL: 'notail';
+CLEANUP: 'cleanup';
+CATCH: 'catch';
+FILTER: 'filter';
 
 NEW_LINE: (';' [^\r\n]*)? [\r\n]+;
 
