@@ -10,11 +10,18 @@ global_decl
   | global_func_def
   | global_attribute_def
   | global_metadata
+  | global_asm_decl
+  | global_type_alias
   ;
 
-global_var_decl: IDENTIFIER EQUALS (linkage)? (preemption)? (visibility)? (dll_storage)? (storage_model)? (UNNAMED_ADDR)? (addr_space)? (EXTERNALLY_INITIALIZED)? (GLOBAL | CONSTANT) (const | type) (COMMA decl_attr)* NEW_LINE
+global_type_alias: IDENTIFIER EQUALS TYPE type;
+
+global_var_decl
+  : IDENTIFIER EQUALS (linkage)? (preemption)? (visibility)? (dll_storage)? (storage_model)? (UNNAMED_ADDR)? (addr_space)? (EXTERNALLY_INITIALIZED)? (GLOBAL | CONSTANT) (const | type) (COMMA decl_attr)* NEW_LINE
+  | IDENTIFIER EQUALS COMDAT ANY
   ; 
 
+global_asm_decl: MODULE ASM STRING_LITERAL;
 global_metadata: meta_ident EQUALS metadata;
 global_attribute_def: ATTRIBUTES NUMBERING EQUALS LBRACE function_attrib* RBRACE NEW_LINE;
 global_struct_decl: IDENTIFIER EQUALS struct_type_decl NEW_LINE;
@@ -23,7 +30,7 @@ global_srcname_decl: SRC_FILENAME EQUALS STRING_LITERAL NEW_LINE;
 global_func_decl: DECLARE (linkage)? (preemption)? (visibility)? (dll_storage)? calling_convention? (param_attrib)* type IDENTIFIER LPAREN arg_list? RPAREN (UNNAMED_ADDR)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? NUMBERING? NEW_LINE;
 global_func_def: DEFINE (linkage)? (preemption)? (visibility)? (dll_storage)? calling_convention? (param_attrib)* type IDENTIFIER LPAREN arg_list? RPAREN (UNNAMED_ADDR)? addr_space? function_attrib* (SECTION STRING_LITERAL)? (PARTITION STRING_LITERAL)? (COMDAT (IDENTIFIER)?)? align? (GC STRING_LITERAL)? (PREFIX const)? (PROLOGUE const)? (PERSONALITY const)? (metadata)* NUMBERING? LBRACE NEW_LINE basic_block* RBRACE;
 
-basic_block : label_decl? instr+;
+basic_block : (LABEL_DECL | STRING_LITERAL COLON)? (instr | NEW_LINE)+;
 
 instr
   : ( ret_instr
@@ -87,10 +94,12 @@ instr
    | select_instr
    | freeze_instr
    | call_instr
+   | asm_instr
    | vaarg_instr
    | landingpad_instr
    | catchpad_instr
    | cleanuppad_instr
+   | switch_instr
 ) (COMMA metadata)* NEW_LINE;
 
 ret_instr
@@ -120,17 +129,17 @@ calling_convention
   | STRING_LITERAL
   ; 
 
-switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK (type const COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK;
+switch_instr: SWITCH type value COMMA LABEL IDENTIFIER LBRACK NEW_LINE? (type untyped_const COMMA LABEL IDENTIFIER NEW_LINE?)* RBRACK;
 
 indirectbr_instr: INDIRECTBR PTR value COMMA LBRACK (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*) RBRACK;
 
-invoke_instr: INVOKE calling_convention? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
+invoke_instr: (IDENTIFIER EQUALS)? INVOKE calling_convention? (param_attrib)* (addr_space)? fnty value LPAREN param_list RPAREN function_attrib* NEW_LINE? TO LABEL IDENTIFIER UNWIND LABEL IDENTIFIER;
 
-callbr_instr: CALLBR calling_convention? (param_attrib)* (addr_space)? (type | function_type) value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER+;
+callbr_instr: (IDENTIFIER EQUALS)? CALLBR calling_convention? (param_attrib)* (addr_space)? fnty value LPAREN param_list RPAREN function_attrib* TO LABEL IDENTIFIER+;
 
 resume_instr: RESUME type value;
 
-catchswitch_instr: CATCHSWITCH WITHIN (IDENTIFIER | NONE) (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*)? UNWIND (TO CALLER | LABEL IDENTIFIER);
+catchswitch_instr: (IDENTIFIER EQUALS)? CATCHSWITCH WITHIN (IDENTIFIER | NONE) (LABEL IDENTIFIER (COMMA LABEL IDENTIFIER)*)? UNWIND (TO CALLER | LABEL IDENTIFIER);
 
 catchret_instr: CATCHRET FROM IDENTIFIER TO LABEL IDENTIFIER;
 
@@ -171,23 +180,23 @@ shufflevector_instr: IDENTIFIER EQUALS SHUFFLE_VECTOR type value COMMA type valu
 extractvalue_instr: IDENTIFIER EQUALS EXTRACT_VALUE type value COMMA int_literal (COMMA int_literal);
 insertvalue_instr: IDENTIFIER EQUALS INSERT_VALUE type value COMMA type value COMMA int_literal (COMMA int_literal)*;
 
-alloca_instr: IDENTIFIER EQUALS ALLOCA INALLOCA? type (COMMA type int_literal)? (COMMA align)? (COMMA addr_space)?;
+alloca_instr: IDENTIFIER EQUALS ALLOCA INALLOCA? type (COMMA type value)? (COMMA align)? (COMMA addr_space)?;
 load_instr: IDENTIFIER EQUALS LOAD (ATOMIC)? (VOLATILE)? type COMMA PTR (ptr_constant | IDENTIFIER) syncscope? ordering? (COMMA align)? (COMMA metadata)*;
 store_instr: STORE (ATOMIC)? (VOLATILE)? type value COMMA PTR (ptr_constant | IDENTIFIER) syncscope? ordering? (COMMA align)? (COMMA metadata)*;
-getelementptr_instr: IDENTIFIER EQUALS GETELEMENTPTR (INBOUNDS | NUSW | NUW | inrange)* type COMMA PTR (ptr_constant | IDENTIFIER) (COMMA type value)*;
+getelementptr_instr: IDENTIFIER EQUALS GETELEMENTPTR (INBOUNDS | NUSW | NUW | inrange)* type COMMA PTR (value) (COMMA type value)*;
 
 fence_instr: FENCE syncscope? ordering;
-cmpxchg_instr: IDENTIFIER EQUALS CMPXCHG WEAK? VOLATILE? PTR (ptr_constant | IDENTIFIER) COMMA type value COMMA type value syncscope? ordering ordering (COMMA align)?;
-atomicrmw_instr: IDENTIFIER EQUALS ATOMICRMW VOLATILE? (XCHG | ADD | SUB | AND | NAND | OR | XOR | MAX | MIN | UMAX | UMIN | FADD | FSUB | FMAX | FMIN | FMAXIMUM | FMINIMUM | UINC_WRAP | UDEC_WRAP | USUB_COND | USUB_SAT) PTR (ptr_constant | IDENTIFIER) COMMA type value syncscope? ordering ordering (COMMA align)?;
+cmpxchg_instr: IDENTIFIER EQUALS CMPXCHG WEAK? VOLATILE? PTR (ptr_constant | IDENTIFIER) COMMA type value COMMA type value syncscope? ordering (COMMA align)?;
+atomicrmw_instr: IDENTIFIER EQUALS ATOMICRMW VOLATILE? (XCHG | ADD | SUB | AND | NAND | OR | XOR | MAX | MIN | UMAX | UMIN | FADD | FSUB | FMAX | FMIN | FMAXIMUM | FMINIMUM | UINC_WRAP | UDEC_WRAP | USUB_COND | USUB_SAT) PTR value COMMA type value syncscope? ordering (COMMA align)?;
 
 trunc_instr: IDENTIFIER EQUALS TRUNC NUW? NSW? type value TO type;
-zext_instr: IDENTIFIER EQUALS ZEXT type value TO type;
+zext_instr: IDENTIFIER EQUALS ZEXT NNEG? type value TO type;
 sext_instr: IDENTIFIER EQUALS SEXT type value TO type;
 fptrunc_instr: IDENTIFIER EQUALS FPTRUNC fast_math_flag* type value TO type;
 fpext_instr: IDENTIFIER EQUALS FPEXT fast_math_flag* type value TO type;
 fptoui_instr: IDENTIFIER EQUALS FPTOUI type value TO type;
 fptosi_instr: IDENTIFIER EQUALS FPTOSI type value TO type;
-uitofp_instr: IDENTIFIER EQUALS UITOFP type value TO type;
+uitofp_instr: IDENTIFIER EQUALS UITOFP NNEG? type value TO type;
 sitofp_instr: IDENTIFIER EQUALS SITOFP type value TO type;
 ptrtoint_instr: IDENTIFIER EQUALS PTRTOINT type value TO type;
 ptrtoaddr_instr: IDENTIFIER EQUALS PTRTOADDR type value TO type;
@@ -211,6 +220,7 @@ condition
   | OGT
   | OGE
   | OLT
+  | OLE
   | ONE
   | ORD
   | UEQ
@@ -221,12 +231,14 @@ condition
 icmp_instr: IDENTIFIER EQUALS ICMP SAMESIGN? condition type value COMMA value;
 fcmp_instr: IDENTIFIER EQUALS FCMP fast_math_flag* condition type value COMMA value;
 
-phi_instr: IDENTIFIER EQUALS PHI fast_math_flag* type LBRACK type COMMA IDENTIFIER RBRACK (COMMA LBRACK type COMMA IDENTIFIER RBRACK)*;
+phi_instr: IDENTIFIER EQUALS PHI fast_math_flag* type LBRACK value COMMA IDENTIFIER RBRACK (COMMA LBRACK value COMMA IDENTIFIER RBRACK)*;
 select_instr: IDENTIFIER EQUALS SELECT fast_math_flag* type value COMMA type value COMMA type value;
 
 freeze_instr: IDENTIFIER EQUALS FREEZE type value;
 
-call_instr: IDENTIFIER EQUALS (TAIL | MUSTTAIL | NOTAIL)? CALL fast_math_flag* calling_convention? param_attrib* addr_space? type value LPAREN param_list RPAREN function_attrib*;
+call_instr: (IDENTIFIER EQUALS)? (TAIL | MUSTTAIL | NOTAIL)? CALL fast_math_flag* calling_convention? param_attrib* addr_space? fnty value LPAREN param_list RPAREN function_attrib*;
+
+asm_instr: (IDENTIFIER EQUALS)? (TAIL | MUSTTAIL | NOTAIL)? CALL fast_math_flag* type ASM param_attrib* STRING_LITERAL COMMA STRING_LITERAL LPAREN param_list RPAREN function_attrib*;
 
 vaarg_instr: IDENTIFIER EQUALS VA_ARG type value COMMA type;
 
@@ -234,7 +246,7 @@ clause
   : CATCH type value
   | FILTER type value
   ;
-landingpad_instr: IDENTIFIER EQUALS LANDINGPAD type CLEANUP? clause*;
+landingpad_instr: IDENTIFIER EQUALS LANDINGPAD type NEW_LINE? CLEANUP? clause*;
 catchpad_instr: IDENTIFIER EQUALS CATCHPAD WITHIN (IDENTIFIER | NONE) (LBRACK (type value (COMMA type value)*)? RBRACK)?;
 cleanuppad_instr: IDENTIFIER EQUALS CLEANUPPAD WITHIN IDENTIFIER (LBRACK (type value (COMMA type value)*)? RBRACK)?;
 
@@ -303,6 +315,7 @@ ptr_type
 
 vector_type: LANGLE (VSCALE XLIT)? int_literal XLIT type RANGLE ;
 
+fnty: function_type | type;
 function_type: type LPAREN param_type_list RPAREN;
 param_type_list
   : DOTS
@@ -331,6 +344,7 @@ type
   | INT_TYPE
   | float_type
   | ptr_type
+  | METADATA
   | LABEL
   | IDENTIFIER
   ;
@@ -340,6 +354,9 @@ type_list: type (COMMA type)*;
 value
   : untyped_const
   | IDENTIFIER
+  | metadata
+  | UNDEF
+  | POISON
   ;
 
 int_literal
@@ -352,16 +369,35 @@ float_literal
   ;
 
 new_ptr_style: PTR (addr_space)?;
-old_ptr_style: type STAR (addr_space)?;
+old_ptr_style: (literal_struct_type | array_type | vector_type | INT_TYPE | float_type | IDENTIFIER) STAR (addr_space)?;
 addr_space: ADDRSPACE LPAREN (STRING_LITERAL | int_literal) RPAREN;
 
 syncscope: SYNCSCOPE LPAREN STRING_LITERAL RPAREN;
 ordering: UNORDERED | MONOTONIC | ACQUIRE | RELEASE | ACQ_REL | SEQ_CST;
 
-struct_constant: LBRACE const_list RBRACE;
+struct_constant
+  : LBRACE const_list RBRACE
+  | LANGLE LBRACE const_list RBRACE RANGLE
+  ;
 array_constant: LBRACK (const (COMMA const)*) RBRACK;
 vector_constant: LANGLE const_list RANGLE;
-ptr_constant: NULL;
+ptr_constant: NULL | IDENTIFIER;
+
+const_expr
+  : TRUNC LPAREN const TO type RPAREN
+  | PTRTOINT LPAREN const TO type RPAREN
+  | PTRTOADDR LPAREN const TO type RPAREN
+  | INTTOPTR LPAREN const TO type RPAREN
+  | BITCAST LPAREN const TO type RPAREN
+  | ADDRSPACECAST LPAREN const TO type RPAREN
+  | GETELEMENTPTR INBOUNDS? LPAREN type COMMA const (COMMA INT_TYPE int_literal)+ RPAREN
+  | EXTRACT_ELEMENT LPAREN value COMMA int_literal RPAREN
+  | INSERT_ELEMENT LPAREN value COMMA value COMMA int_literal RPAREN
+  | SHUFFLE_VECTOR LPAREN value COMMA value COMMA value RPAREN
+  | ADD LPAREN value COMMA value RPAREN
+  | SUB LPAREN value COMMA value RPAREN
+  | XOR LPAREN value COMMA value RPAREN
+  ;
 
 untyped_const
   :  float_literal
@@ -373,6 +409,7 @@ untyped_const
    | ptr_constant
    | ZEROINITIALIZER
    | METADATA metadata
+   | const_expr
    ;
 
 const
@@ -382,8 +419,9 @@ const
    | (array_type array_constant)
    | (vector_type vector_constant)
    | (array_type STRING_LITERAL)
-   | (ptr_type ptr_constant?)
-   | (ZEROINITIALIZER) 
+   | (ptr_type ptr_constant)
+   | (type const_expr)
+   | (type ZEROINITIALIZER) 
    | (METADATA metadata)
    ;
 
@@ -409,12 +447,17 @@ alignstack: ALIGNSTACK LPAREN int_literal RPAREN;
 initialize_el: LPAREN int_literal COMMA int_literal RPAREN;
 initialize_el_list: initialize_el (COMMA initialize_el)*;
 initializes: INITIALIZES LPAREN initialize_el_list RPAREN;
-range: RANGE LPAREN type const COMMA const RPAREN;
+range: RANGE LPAREN const COMMA untyped_const RPAREN;
 allocfamily: STRING_LITERAL EQUALS STRING_LITERAL;
 uwtable: UWTABLE (LPAREN (SYNC | ASYNC) RPAREN)?;
 allockind: ALLOCKIND LPAREN STRING_LITERAL RPAREN;
 allocsize: ALLOCSIZE LPAREN int_literal (COMMA int_literal)* RPAREN;
-memory: MEMORY LPAREN (NONE | READ | WRITE | READWRITE | (ARGMEM COLON READ) | (ARGMEM COLON READ COMMA INACCESSIBLEMEM COLON WRITE) | (ARGMEM COLON READ COMMA ERRNOMEM COLON WRITE) | (READ COMMA ARGMEM COLON READWRITE) | (READWRITE COMMA ARGMEM COLON NONE)) RPAREN;
+memory_access: NONE | READ | WRITE | READWRITE | ERRNOMEM;
+memory_access_decl
+  : (ARGMEM COLON)? memory_access
+  | (INACCESSIBLEMEM COLON)? memory_access
+  ;
+memory: MEMORY LPAREN (memory_access_decl (COMMA memory_access_decl)*) RPAREN;
 vscale_range: VSCALE_RANGE LPAREN int_literal (COMMA int_literal)? RPAREN;
 
 param_attrib
@@ -454,6 +497,9 @@ param_attrib
   | initializes
   | DEAD_ON_UNWIND
   | DEAD_ON_RETURN
+  | SIDEEFFECT
+  | UNWIND
+  | INTELDIALECT
   | range
   ;
 
@@ -517,6 +563,7 @@ function_attrib
   | SSPSTRONG
   | SSPREQ
   | STRICTFP
+  | SIDEEFFECT
   | uwtable
   | NOCF_CHECK
   | SHADOWCALLSTACK
@@ -525,6 +572,7 @@ function_attrib
   | NOCREATEUNDEFORPOISON
   | VECTOR_FUNCTION_ABI_VARIANT
   | preallocated
+  | NUMBERING
   ;
 
 arg_decl
@@ -538,11 +586,13 @@ param_list: param_decl* (COMMA param_decl)*;
 
 inrange: INRANGE LPAREN int_literal COMMA int_literal RPAREN;
 
-meta_ident: EXCLAM (DBG | NONTEMPORAL | LLVM_LOOP | INVARIANT_GROUP | LLVM_ACCESS_GROUP | IRR_LOOP | INVARIANT_GROUP | CALLEE_TYPE | ASSOCIATED | PROF | ANNOTATION | FUNC_SANITIZE | KCFI_TYPE | MEMPROF | CALLSITE | NOALIAS_ADDRSPACE | MMRA | ALLOC_TOKEN | NOUNDEF | ALIGN | DEREFERENCEABLE | DEREFERENCEABLE_OR_NULL | NONNULL | TBAA | ALIASSCOPE | LLVM_IDENT | LLVM_MODULE_FLAGS);
+meta_ident: meta_flag | meta_string | meta_number | meta_tuple;
+meta_flag: 
+  EXCLAM (DBG | NONTEMPORAL | LLVM_LOOP | INVARIANT_GROUP | LLVM_ACCESS_GROUP | IRR_LOOP | INVARIANT_GROUP | CALLEE_TYPE | ASSOCIATED | PROF | ANNOTATION | FUNC_SANITIZE | KCFI_TYPE | MEMPROF | CALLSITE | NOALIAS | NOALIAS_ADDRSPACE | MMRA | ALLOC_TOKEN | NOUNDEF | ALIGN | DEREFERENCEABLE | DEREFERENCEABLE_OR_NULL | NONNULL | TBAA | ALIASSCOPE | LLVM_IDENT | LLVM_MODULE_FLAGS | CALLEES | SRCLOC);
 meta_string: DISTINCT? EXCLAM STRING_LITERAL;
 meta_number: DISTINCT? EXCLAM int_literal;
-meta_tuple: DISTINCT? EXCLAM LBRACE (metadata|const) (COMMA (metadata|const))* RBRACE;
-meta_node: DISTINCT? meta_ident metadata;
+meta_tuple: DISTINCT? EXCLAM LBRACE ((metadata|const) (COMMA (metadata|const))*)? RBRACE;
+meta_node: DISTINCT? meta_flag metadata;
 metadata
   : meta_string
   | meta_tuple
@@ -556,9 +606,8 @@ DECIMAL_LITERAL: ('-')? (([1-9] [0-9]*) | '0' | 'true' | 'false');
 HEXA_LITERAL: [us] '0' [xX] [0-9a-fA-F]+;
 FLOAT_LITERAL: ('-')?[0-9]*'.'[0-9]+('e'('+'|'-')[0-9]+)?;
 FLOAT_HEXA_LITERAL: '0' [xX] [MLHR]? [0-9a-fA-F]+;
-IDENTIFIER: [%@$][-a-zA-Z$._0-9][-a-zA-Z$._0-9]*;
-LABEL_DECL: [A-Za-z0-9]+ ':';
-label_decl: LABEL_DECL NEW_LINE;
+IDENTIFIER: ([%@$][-a-zA-Z$._0-9]+)|([%@$] '"' [^"]* '"');
+LABEL_DECL: [-A-Za-z0-9._]+ ':' (' '|'\t')* (';' [^\r\n]*)? [\r\n]+;
 
 fast_math_flag
   : FAST
@@ -576,6 +625,9 @@ NUW: 'nuw';
 NSW: 'nsw';
 NUSW: 'nusw';
 
+CALLEES: 'callees';
+MODULE: 'module';
+ASM: 'asm';
 PRIVATE: 'private';
 INTERNAL: 'internal';
 AVAILABLE_EXTERNALLY: 'available_externally';
@@ -597,6 +649,7 @@ ACQ_REL: 'acq_rel';
 SEQ_CST: 'seq_cst';
 TBAA: 'tbaa';
 ALIASSCOPE: 'alias.scope';
+SRCLOC: 'srcloc';
 
 CONSTANT: 'constant';
 GLOBAL: 'global';
@@ -693,6 +746,7 @@ ELEMENTTYPE: 'elementtype';
 NOALIAS: 'noalias';
 CAPTURES: 'captures';
 NOCAPTURE: 'nocapture';
+SIDEEFFECT: 'sideeffect';
 NEST: 'nest';
 RETURNED: 'returned';
 NONNULL: 'nonnull';
@@ -703,6 +757,7 @@ SWIFTASYNC: 'swiftasync';
 SWIFTERROR: 'swifterror';
 IMMARG: 'immarg';
 NOUNDEF: 'noundef';
+POISON: 'poison';
 NOFPCLASS: 'nofpclass';
 NAN: 'nan';
 NONE: 'none';
@@ -828,6 +883,7 @@ INDIRECTBR: 'indirectbr';
 INVOKE: 'invoke';
 TO: 'to';
 UNWIND: 'unwind';
+INTELDIALECT: 'inteldialect';
 CALLBR: 'callbr';
 RESUME: 'resume';
 CATCHSWITCH: 'catchswitch';
@@ -916,6 +972,7 @@ OEQ: 'oeq';
 OGT: 'ogt';
 OGE: 'oge';
 OLT: 'olt';
+OLE: 'ole';
 ONE: 'one';
 ORD: 'ord';
 UEQ: 'ueq';
@@ -937,6 +994,8 @@ NOTAIL: 'notail';
 CLEANUP: 'cleanup';
 CATCH: 'catch';
 FILTER: 'filter';
+NNEG: 'nneg';
+ANY: 'any';
 
 NEW_LINE: (';' [^\r\n]*)? [\r\n]+;
 
